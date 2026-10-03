@@ -1,7 +1,8 @@
 /**
  * DompetKu — Praktikum 3 PABWE (JavaScript)
  * Fitur: Tab switcher, Expense Tracker, Bookmark Manager, Quiz App
- * Semua data disimpan di localStorage (key berbeda per fitur).
+ * Data fitur disimpan di localStorage (key berbeda per fitur).
+ * Tab aktif disimpan di query URL (?tab=expense|bookmark|quiz).
  */
 "use strict";
 
@@ -99,7 +100,6 @@ function today() {
 
 /* Key localStorage — dibedakan per fitur agar data tidak saling menimpa */
 const KEYS = {
-  tab: "dompetku-p3-active-tab",
   expenses: "dompetku-p3-expenses",
   bookmarks: "dompetku-p3-bookmarks",
   quizHigh: "dompetku-p3-quiz-highscore",
@@ -174,9 +174,21 @@ const panels = {
 const ACTIVE_CLASSES = ["bg-indigo-700", "text-white", "shadow"];
 const INACTIVE_CLASSES = ["text-slate-600", "hover:bg-slate-100"];
 
-/** Tampilkan satu panel saja, tandai tombol aktif, simpan pilihan */
-function switchTab(name) {
-  if (!panels[name]) name = "expense";
+const TAB_PARAM = "tab";
+const DEFAULT_TAB = "expense";
+
+/** Baca nama tab dari query string; nilai tidak dikenal jatuh ke tab default */
+function getTabFromUrl() {
+  const name = new URLSearchParams(window.location.search).get(TAB_PARAM);
+  return panels[name] ? name : DEFAULT_TAB;
+}
+
+/**
+ * Tampilkan satu panel saja, tandai tombol aktif, lalu sinkronkan URL (?tab=...).
+ * historyMode: "push" (klik tab), "replace" (muat awal), "none" (Back/Forward).
+ */
+function switchTab(name, historyMode = "push") {
+  if (!panels[name]) name = DEFAULT_TAB;
 
   Object.entries(panels).forEach(([key, panel]) => {
     panel.classList.toggle("hidden", key !== name);
@@ -189,16 +201,21 @@ function switchTab(name) {
     INACTIVE_CLASSES.forEach((c) => btn.classList.toggle(c, !active));
   });
 
-  try {
-    localStorage.setItem(KEYS.tab, name);
-  } catch {
-    /* abaikan */
-  }
+  if (historyMode === "none") return;
+  const url = new URL(window.location.href);
+  url.searchParams.set(TAB_PARAM, name);
+  history[historyMode === "replace" ? "replaceState" : "pushState"]({ tab: name }, "", url);
 }
 
 tabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  btn.addEventListener("click", () => {
+    const name = btn.dataset.tab;
+    if (name !== getTabFromUrl()) switchTab(name);
+  });
 });
+
+// Tombol Back/Forward browser: ikuti URL tanpa menambah riwayat baru
+window.addEventListener("popstate", () => switchTab(getTabFromUrl(), "none"));
 
 /* =====================================================================
    4. EXPENSE TRACKER
@@ -898,11 +915,5 @@ renderBookmarks();
 showHighScore();
 showQuizView("start");
 
-// Pulihkan tab terakhir yang dibuka (default: expense)
-let savedTab = "expense";
-try {
-  savedTab = localStorage.getItem(KEYS.tab) || "expense";
-} catch {
-  /* abaikan */
-}
-switchTab(savedTab);
+// Pulihkan tab dari URL; "replace" merapikan URL tanpa menambah riwayat
+switchTab(getTabFromUrl(), "replace");
